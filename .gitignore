@@ -2,16 +2,18 @@
 #directories
 data-raw/raw/
 data/
+.Rproj.user/
 
 
-.Rhistory
-.RData
-.ro
-.rds
-.sqlite
-.zip
-.CEL
-.xls
-.csv
-.txt
-.root
+*.Rhistory
+*.RData
+*.ro
+*.rds
+*.sqlite
+*.zip
+*.CEL
+*.xls
+*.csv
+*.txt
+*.root
+*.ods

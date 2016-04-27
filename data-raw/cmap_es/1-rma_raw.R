@@ -3,6 +3,7 @@ library(data.table)
 
 setwd("~/Documents/Batcave/GEO/ccdata/data-raw/")
 
+#raw data from https://www.broadinstitute.org/cmap/cel_file_chunks.jsp
 
 
 
