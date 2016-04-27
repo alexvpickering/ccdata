@@ -1,0 +1,17 @@
+
+#directories
+data-raw/raw/
+data/
+
+
+.Rhistory
+.RData
+.ro
+.rds
+.sqlite
+.zip
+.CEL
+.xls
+.csv
+.txt
+.root
