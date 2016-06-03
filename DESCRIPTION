@@ -1,9 +1,16 @@
 Package: ccdata
-Type: Package
-Title: What the Package Does (Title Case)
-Version: 0.1.0
-Author: Who wrote it
-Maintainer: Who to complain to <yourfault@somewhere.net>
-Description: More about what it does (maybe more than one line)
-License: What license is it under?
+Title: Data for Combination Connectivity Mapping (ccmap) Package
+Version: 0.99.1
+Author: Alex Pickering
+Maintainer: Alex Pickering <alexvpickering@gmail.com>
+Description: This package contains microarray gene expression data generated
+    from the Connectivity Map build 02. The data are used by the ccmap package
+    to find drugs and drug combinations to mimic or reverse a gene expression
+    signature.
+Depends:
+    R (>= 3.3)
+License: MIT + file LICENSE
 LazyData: TRUE
+biocViews: ExperimentData,
+    MicroarrayData
+RoxygenNote: 5.0.1
