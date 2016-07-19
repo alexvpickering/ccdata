@@ -1,6 +1,6 @@
 Package: ccdata
 Title: Data for Combination Connectivity Mapping (ccmap) Package
-Version: 0.99.1
+Version: 0.99.3
 Author: Alex Pickering
 Maintainer: Alex Pickering <alexvpickering@gmail.com>
 Description: This package contains microarray gene expression data generated
@@ -10,7 +10,9 @@ Description: This package contains microarray gene expression data generated
 Depends:
     R (>= 3.3)
 License: MIT + file LICENSE
-LazyData: TRUE
-biocViews: ExperimentData,
-    MicroarrayData
+LazyData: false
+biocViews:
+    ExperimentData,
+    MicroarrayData,
+    ExpressionData
 RoxygenNote: 5.0.1

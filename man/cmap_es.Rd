@@ -4,9 +4,12 @@
 \name{cmap_es}
 \alias{cmap_es}
 \title{Effect size values for Connectivity Map build 02 drugs.}
-\format{A matrix where columns correspond to drugs and rows to gene symbols.}
+\format{An object of class \code{matrix} with 13832 rows and 1309 columns.}
 \usage{
 data(cmap_es)
+}
+\value{
+A matrix where columns correspond to drugs and rows to gene symbols.
 }
 \description{
 Effect size values for all 1309 drugs in the Connectivity Map build 02.

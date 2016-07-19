@@ -15,8 +15,8 @@ ls_cols <- grepl("dprime|adj.P.Val", colnames(train))
 X <- train[, ls_cols & !cb_cols]
 
 #swap values between drug1 and drug2 columns
-d1_cols <- grep("drug1", colnames(X), value=T)
-d2_cols <- grep("drug2", colnames(X), value=T)
+d1_cols <- grep("drug1", colnames(X), value=TRUE)
+d2_cols <- grep("drug2", colnames(X), value=TRUE)
 
 Xr <- X
 colnames(Xr) <- c(d2_cols, d1_cols)
@@ -35,9 +35,8 @@ evalerror <- function(preds, dtrain) {
     return(list(metric = "error", value = err))
 }
 
-
 grid <- expand.grid(subsample=c(1, 0.75, 0.5),
-                    colsample_bytree=1,
+                    colsample_bytree=c(1, 0.75, 0.5),
                     max.depth=c(10, 8, 6, 4))
 ntrees <- 1000
 
@@ -45,7 +44,7 @@ ntrees <- 1000
 dtrain <- xgb.DMatrix(data=as.matrix(X), label=y)
 
 #cleanup
-rm(train, Xr, filt, d1_cols, d2_cols, cb_cols, X, y)
+rm(train, Xr, filt, d1_cols, d2_cols, cb_cols, X, y, ls_cols)
 gc()
 
 res <- data.frame(test_error=numeric(0),
@@ -60,16 +59,16 @@ for (i in 1:nrow(grid)) {
     dep <- grid[["max.depth"]][i]
 
       params <- list(objective           = "reg:linear",
-                     eta                 = 0.2,
-                     subsample           = 1,
-                     colsample_bytree    = 1,
-                     max_depth           = 8,
+                     eta                 = 0.05,
+                     subsample           = sub,
+                     colsample_bytree    = col,
+                     max_depth           = dep,
                      tree_method         = "approx",
                      eval_metric         = evalerror)
 
-      history <- xgb.cv(params, dtrain, 580,
+      history <- xgb.cv(params, dtrain, 1000,
                         nfold = 5, early.stop.round = 50,
-                        maximize = FALSE, prediction = TRUE)
+                        maximize = FALSE, prediction = FALSE)
 
 
     #Save rmse/best iteration

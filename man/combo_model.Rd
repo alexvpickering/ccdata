@@ -4,8 +4,12 @@
 \name{combo_model}
 \alias{combo_model}
 \title{XGBoost model for treatment combinations.}
+\format{An object of class xgb.Booster.}
 \usage{
 data(combo_model)
+}
+\value{
+xgb.Booster object
 }
 \description{
 XGBoost model used to predict gene expression changes resulting from a
@@ -13,8 +17,8 @@ combination treatment.
 }
 \details{
 Predictions for combinations are made using data from the individual
-treatments. Model was trained using 'combo_train' data and is used to predict
-Connectivity Map build 02 combinations using 'cmap_tables'.
+treatments. Model was trained using \code{combo_train} data and is used to
+predict Connectivity Map build 02 combinations using \code{cmap_tables}.
 }
 \keyword{datasets}
 

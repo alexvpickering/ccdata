@@ -12,7 +12,7 @@ data_dir <- paste("~/Documents/Batcave/GEO/1-meta", "COMBOS", sep="/")
 get_raw(gse_names, data_dir)
 
 #load esets
-esets <- load_raw(affy_names, data_dir)
+esets <- load_raw(gse_names, data_dir)
 
 #backup
 esets_copy <- esets
@@ -23,18 +23,11 @@ esets_copy <- esets
 
 # Differential Expression -------------------------
 
-
-#run initial analysis
-anals <- diff_expr(esets, data_dir, "PROBE")
-
 #reload previous analysis
-anals <- load_diff(affy_names, data_dir, probe=TRUE)
-
-#backup
-anals_copy <- anals
+anals <- load_diff(gse_names, data_dir, "PROBE")
 
 #re-run previous analysis
-anals <- diff_expr(esets, data_dir, "PROBE", anals)
+anals <- diff_expr(esets, data_dir, "PROBE", prev)
 
 
 # Setup Training Data -------------------------
