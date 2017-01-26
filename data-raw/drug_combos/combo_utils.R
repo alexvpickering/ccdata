@@ -115,7 +115,7 @@ add_coxpres <- function(diff_exprs) {
 # @return list (one per GSE) of lists (one per combination treatment)
 #    with contrast names for each combination treatment in each GSE.
 
-select_combo_data <- function(diff_exprs, prev_selections){
+select_combo_data <- function(diff_exprs, prev_selections = list()){
 
     #setup selections
     selections <- vector("list", length(diff_exprs))
@@ -164,38 +164,45 @@ select_combo_data <- function(diff_exprs, prev_selections){
 #
 # @return data.frame
 
-combine_combo_data <- function(diff_exprs, selections){
+combine_combo_data <- function(cbo_data, selections){
 
-    #return value
-    data <- list()
+    # setup
+    nrows  <- length(unlist(selections, recursive = FALSE))
+    dr1_cols <- paste0('drug1_', colnames(cbo_data))
+    dr2_cols <- paste0('drug2_', colnames(cbo_data))
+    cbo_cols <- paste0('combo_', colnames(cbo_data))
+
+    Xtrain   <- matrix(nrow = nrows,
+                       ncol = 2 * ncol(cbo_data),
+                       dimnames = list(1:nrows, c(dr1_cols, dr2_cols)))
+
+    ytrain   <- matrix(nrow = nrows,
+                       ncol = ncol(cbo_data),
+                       dimnames = list(1:nrows, cbo_cols))
+
 
     #loop through each GSE
+    n = 1
+    cbo_data <- t(cbo_data)
     for (i in seq_along(selections)) {
 
         print(i)
-
-        tops <- diff_exprs[[i]]$top_tables
         sels <- selections[[i]]
-        ord <- row.names(tops[[1]])
 
         #loop through each selection within each GSE
         for (sel in sels) {
 
-            drug1 <- tops[[ sel['drug1'] ]][ord, ]
-            drug2 <- tops[[ sel['drug2'] ]][ord, ]
-            combo <- tops[[ sel['combo'] ]][ord, ]
+            # add drug1 and drug2 values to Xtrain
+            Xtrain[n, dr1_cols] <- cbo_data[, make.names(sel['drug1'])]
+            Xtrain[n, dr2_cols] <- cbo_data[, make.names(sel['drug2'])]
 
-            #name and bind together
-            colnames(drug1) <- paste("drug1", colnames(drug1), sep="_")
-            colnames(drug2) <- paste("drug2", colnames(drug2), sep="_")
-            colnames(combo) <- paste("combo", colnames(combo), sep="_")
+            # add combo values to ytrain
+            ytrain[n, ] <- cbo_data[, make.names(sel['combo'])]
 
-            data[[length(data)+1]] <- cbind(drug1, drug2, combo, row.names=NULL)
+            n <- n + 1
         }
     }
-    data <- data.table::rbindlist(data)
-    data <- as.data.frame(data)
-    return(data)
+    return(list(X = Xtrain, y = ytrain))
 }
 
 

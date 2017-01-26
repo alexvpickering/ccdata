@@ -140,7 +140,7 @@ ebayes_sv <- fit_ebayes(eset, contrasts, modsv)
 
 
 #save results
-rma_processed2 <- list(eset=eset, svobj=svobj, ebayes_sv=ebayes_sv)
+rma_processed <- list(eset=eset, svobj=svobj, ebayes_sv=ebayes_sv)
 saveRDS(rma_processed, "cmap_es/rma_processed.rds")
 
 
@@ -159,20 +159,18 @@ for (i in seq_along(drugs)) {
   #get top table
   top_table <- topTable(ebayes_sv, coef=i, n=Inf)
 
-  #add dprime
+  #add dprime and vardprime
   nj <- sum(mod[, i])
-  top_table$dprime <- effectsize(top_table$t, ((ni * nj)/(ni + nj)), df)[, "dprime"]
+  top_table[,c("dprime", "vardprime")] <- effectsize(top_table$t, ((ni * nj)/(ni + nj)), df)[, c("dprime", "vardprime")]
 
   #store (use eset probe order)
   cmap_tables[[drugs[i]]] <- top_table[featureNames(eset), ]
 }
-#save
-devtools::use_data(cmap_tables)
 
 
 
 
-# Annotate --------------------------------------
+# cmap_es --------------------------------------
 
 
 
@@ -207,4 +205,43 @@ colnames(cmap_es) <- gsub(".dprime", "", colnames(cmap_es))
 cmap_es <- as.matrix(cmap_es[, drugs])
 
 #save results
+cmap_es <- signif(cmap_es, 5)
 devtools::use_data(cmap_es)
+
+
+
+# cmap_var --------------------------------------
+
+#get dprimes and adjusted p-values
+var_probes <- lapply(cmap_tables, function(x) x[, c("adj.P.Val", "vardprime")])
+var_probes <- do.call(cbind, var_probes)
+
+
+#add symbol
+map <- AnnotationDbi::select(hgu133a.db, row.names(var_probes), "SYMBOL")
+map <- map[!is.na(map$SYMBOL), ]
+var_probes <- var_probes[map$PROBEID, ] #expands 1:many
+var_probes[,"SYMBOL"] <- toupper(map$SYMBOL)
+
+# where symbol duplicated, keep smallest p-value
+var_probes <- as.data.table(var_probes)
+dp   <- grep("vardprime$", names(var_probes), value = TRUE)
+pval <- grep("adj.P.Val$", names(var_probes), value = TRUE)
+
+cmap_var <- var_probes[, Map(`[`, 
+                            mget(dp), 
+                            lapply(mget(pval), which.min)),
+                      by = SYMBOL]
+
+
+#use symbol for row names
+class(cmap_var) <- "data.frame"
+row.names(cmap_var) <- cmap_var$SYMBOL
+
+#remove dprime from column names
+colnames(cmap_var) <- gsub(".vardprime", "", colnames(cmap_var))
+cmap_var <- as.matrix(cmap_var[, drugs])
+
+#save results
+cmap_var <- signif(cmap_var, 5)
+devtools::use_data(cmap_var)

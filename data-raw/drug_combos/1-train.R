@@ -7,15 +7,15 @@ setwd("~/Documents/Batcave/GEO/ccdata/data-raw/drug_combos")
 
 data_dir <- paste("~/Documents/Batcave/GEO/1-meta", "COMBOS", sep="/")
 
-#load gse names from csv
+# load previous analyses
+gse_names <- read.table("gse_names.csv", quote="\"",
+                        comment.char="", stringsAsFactors=FALSE)$V1
 
-get_raw(gse_names, data_dir)
+anals <- load_diff(gse_names, data_dir, "SYMBOL")
 
 #load esets
 esets <- load_raw(gse_names, data_dir)
 
-#backup
-esets_copy <- esets
 
 #GSE17672.GPL3921 incomplete
 #esets$"GSE17672.GPL3921" <- NULL
@@ -24,10 +24,10 @@ esets_copy <- esets
 # Differential Expression -------------------------
 
 #reload previous analysis
-anals <- load_diff(gse_names, data_dir, "PROBE")
+prev <- load_diff(gse_names, data_dir, "SYMBOL")
 
 #re-run previous analysis
-anals <- diff_expr(esets, data_dir, "PROBE", prev)
+anals <- diff_expr(esets, data_dir, "PROBE")
 
 
 # Setup Training Data -------------------------

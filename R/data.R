@@ -1,36 +1,63 @@
 #' Effect size values for Connectivity Map build 02 drugs.
 #'
-#' Effect size values for all 1309 drugs in the Connectivity Map build 02.
+#' Unbiased effect sizes values for all 1309 drugs in the Connectivity Map build 02.
 #'
 #' @usage data(cmap_es)
 #' @return A matrix where columns correspond to drugs and rows to gene symbols.
 "cmap_es"
 
 
-
-#' Top tables for Connectivity Map build 02 drugs.
+#' Variance values for Connectivity Map build 02 drugs.
 #'
-#' Adjusted p-values from call to limma \code{topTables} for all 1309
-#' Connectivity Map build 02 drugs. Also includes unbiased effect sizes
-#' (\code{dprimes}) from results of call to metaMA \code{effectsize}.
+#' Variances of unbiased effect sizes values for all 1309 drugs in the
+#' Connectivity Map build 02.
 #'
-#' @usage data(cmap_tables)
-#' @return A named list containing data.frames with dprime and adjusted p-values
-#'    for each drug in the Connectivity Map build 02.
-"cmap_tables"
+#' @usage data(cmap_var)
+#' @return A matrix where columns correspond to drugs and rows to gene symbols.
+"cmap_var"
 
+
+#' Effect size values for LINCS l1000 signatures.
+#'
+#' Unbiased effect sizes values for all 230829 LINCS l1000 signatures.
+#'
+#' @usage data(l1000_es)
+#' @return A matrix where columns correspond to perturbagens and rows to gene symbols.
+"l1000_es"
+
+
+#' HGNC symbols used for NNet predictions.
+#'
+#' Order is as required for input and produced by output of net1/net2 predictions.
+#'
+#' @usage data(genes)
+#' @return A character vector of 11525 HGNC symbols.
+"genes"
+
+
+#' Neural network model 1 for treatment combinations.
+#'
+#' Contains weight matrices and bias vectors needed to make predictions.
+#'
+#' @usage #NA
+#' @return List with matrices W1/W2 and vectors b1/b2.
+"net1"
+
+
+#' Neural network model 2 for treatment combinations.
+#'
+#' Contains weight matrices and bias vectors needed to make predictions.
+#'
+#' @usage #NA
+#' @return List with matrices W1/W2 and vectors b1/b2.
+"net2"
 
 
 #' XGBoost model for treatment combinations.
 #'
-#' XGBoost model used to predict gene expression changes resulting from a
-#' combination treatment.
+#' Model stacks predictions from net1 and net2 with effect size values from
+#' cmap_es and variance values from cmap_var.
 #'
-#' Predictions for combinations are made using data from the individual
-#' treatments. Model was trained using \code{combo_train} data and is used to
-#' predict Connectivity Map build 02 combinations using \code{cmap_tables}.
-#'
-#' @usage data(combo_model)
-#' @format An object of class xgb.Booster.
-#' @return xgb.Booster object
-"combo_model"
+#' @usage #NA
+#' @return Object of class xgb.Booster
+"xgb_mod"

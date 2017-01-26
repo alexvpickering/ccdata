@@ -1,6 +1,6 @@
 
 #directories
-data-raw/raw/
+data-raw/
 data/
 .Rproj.user/
 

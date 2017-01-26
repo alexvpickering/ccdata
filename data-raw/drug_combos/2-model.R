@@ -23,9 +23,9 @@ colnames(Xr) <- c(d2_cols, d1_cols)
 Xr <- Xr[, colnames(X)]
 
 #for each row, randomly use swapped or original orientation
+set.seed(0)
 filt <- sample(c(TRUE, FALSE), nrow(X), replace=TRUE)
 X[filt, ] <- Xr[filt, ]
-
 
 # Grid Search -------------------------
 
@@ -101,10 +101,6 @@ for (i in 1:nrow(grid)) {
 # 0.75-1-4    0.235377    0.235246       822
 # 0.5-1-4     0.235484    0.235394       871
 
-
-
-
-
 # Model -------------------------
 
 combo_model <- xgboost(data=dtrain, nround=580,
@@ -118,9 +114,8 @@ print(xgb.plot.importance(importance_matrix=imp_matrix))
 #save model
 devtools::use_data(combo_model, overwrite = TRUE)
 
-
-
 # Analyse Model -------------------
+history <- readRDS("history.rds")
 
 #preds data.frame
 pdf <- data.frame(xgb = history$pred,
@@ -191,6 +186,9 @@ ggplot(adf) +
 #overall accuracy
 sum(sign(y) == sign(pdf$xgb)) / length(y)
 
-# 0.769
-# 0.760 for 'avg' model
-# 0.708 for 'drug1 or drug2' model
+# 0.766
+# 0.762 for 'avg' model
+
+# spearman correlation of absolute values:
+# 0.536
+# 0.510 for 'avg' model
