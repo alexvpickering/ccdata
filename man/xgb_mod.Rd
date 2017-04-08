@@ -16,4 +16,3 @@ Model stacks predictions from net1 and net2 with effect size values from
 cmap_es and variance values from cmap_var.
 }
 \keyword{datasets}
-

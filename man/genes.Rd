@@ -15,4 +15,3 @@ A character vector of 11525 HGNC symbols.
 Order is as required for input and produced by output of net1/net2 predictions.
 }
 \keyword{datasets}
-

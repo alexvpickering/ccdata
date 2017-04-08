@@ -15,4 +15,3 @@ List with matrices W1/W2 and vectors b1/b2.
 Contains weight matrices and bias vectors needed to make predictions.
 }
 \keyword{datasets}
-

@@ -12,7 +12,15 @@ data(cmap_es)
 A matrix where columns correspond to drugs and rows to gene symbols.
 }
 \description{
-Unbiased effect sizes values for all 1309 drugs in the Connectivity Map build 02.
+Moderated unbiased effect sizes values for all 1309 drugs in the Connectivity Map build 02.
+}
+\details{
+Calculated as described by Marot et al (see reference) using \code{\link[limma]{toptable}}
+from limma and \code{\link[metaMA]{effectsize}} from metaMA.
+}
+\references{
+Marot G, Foulley JL, Mayer CD, Jaffrézic F. Moderated effect size and P-value
+   combinations for microarray meta-analyses. Bioinformatics. 2009 Oct
+   15;25(20):2692-9. doi: 10.1093/bioinformatics/btp444.
 }
 \keyword{datasets}
-
