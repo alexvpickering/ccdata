@@ -3,6 +3,7 @@ library(Biobase)
 library(metaMA)
 library(crossmeta)
 library(hgu133a.db)
+library(data.table)
 
 setwd("~/Documents/Batcave/GEO/ccdata/data-raw/")
 
@@ -10,9 +11,9 @@ setwd("~/Documents/Batcave/GEO/ccdata/data-raw/")
 
 
 #load RMA processed data for each platform
-ht_hga_ea <- readRDS("cmap-es/rma_HT_HG-U133A_EA.rds")
-ht_hga <- readRDS("cmap-es/rma_HT_HG-U133A.rds")
-hga <- readRDS("cmap-es/rma_HG-U133A.rds")
+ht_hga_ea <- readRDS("cmap_es/rma_HT_HG-U133A_EA.rds")
+ht_hga <- readRDS("cmap_es/rma_HT_HG-U133A.rds")
+hga <- readRDS("cmap_es/rma_HG-U133A.rds")
 
 #log2 ht_hga (RMA from xps doesn't log2)
 exprs(ht_hga) <- log2(exprs(ht_hga))
@@ -42,9 +43,14 @@ eset <- new("ExpressionSet", exprs = all_exprs)
 
 #generate model matrix
 cmap_instances <- read.table("raw/cmap_instances_02.csv",
-                             header=TRUE, sep="\t", quote='', fill=TRUE, stringsAsFactors=FALSE)
+                             header=TRUE, sep="\t", fill=TRUE, stringsAsFactors=FALSE)
 
-cmap_instances$batch_id <- (gsub("(\\d+)\\w", "\\1", cmap_instances$batch_id))
+# remove ' from scan names
+cmap_instances$perturbation_scan_id <- gsub("'", '', cmap_instances$perturbation_scan_id)
+cmap_instances$vehicle_scan_id <- gsub("'", '', cmap_instances$vehicle_scan_id)
+
+cmap_instances$batch_id <- gsub("a|b", '', cmap_instances$batch_id)
+
 
 #"valid" drug names (needed for limma makeContrasts)
 drugs     <- unique(cmap_instances$cmap_name)
@@ -74,11 +80,11 @@ for (i in seq_along(drugs)) {
   pdata[pids, "drugv"] <- drug_val
   pdata[pids, "molar"] <- drug_instances$concentration..M.
   pdata[pids, "hours"] <- drug_instances$duration..h.
-  pdata[pids, "cell"]  <- drug_instances$cell2
+  pdata[pids, "cell"]  <- drug_instances$cell
   pdata[pids, "batch"] <- drug_instances$batch_id
 
   #get aggregated control ids
-  cids_ag <- drug_instances$vehicle_scan_id4
+  cids_ag <- drug_instances$vehicle_scan_id
 
   #de-aggregate control ids
   for (j in seq_along(cids_ag)) {
@@ -111,37 +117,59 @@ for (i in seq_along(drugs)) {
 }
 
 #generate model matrix
-treatment <- factor(pdata$drugv, levels = c(drugs_val, 'ctl'))
+# treatment <- factor(pdata$drugv, levels = c(drugs_val, 'ctl'))
 
-mod <- model.matrix(~0 + treatment + cell)
+trt_names   <- paste(pdata$drug, pdata$cell, paste0(pdata$molar, 'M'), paste0(pdata$hours, 'h'), sep='_')
+trt_namesv  <- make.names(trt_names)
+
+treatment <- factor(trt_namesv, levels = unique(trt_namesv))
+batch <- factor(pdata$batch, levels = unique(pdata$batch))
+
+mod <- model.matrix(~0 + treatment + batch)
 colnames(mod)  <- gsub("^treatment", "", colnames(mod))
 row.names(mod) <- 1:nrow(mod)
 
 #generate null model matrix for SVA
-mod0 <- model.matrix(~1, data=pdata)
+# mod0 <- model.matrix(~1, data=pdata)
 
 pData(eset) <- pdata
+
+rm(all_exprs, ht_hga_ea, ht_hga, hga); gc()
 
 # Analysis -------------------------
 
 
 #perform sva
-svobj <- sva(exprs(eset), mod, mod0)
+# svobj <- sva(exprs(eset), mod, mod0)
 
 #add SVs to mod
-modsv <- cbind(mod, svobj$sv)
-colnames(modsv) <- c(colnames(mod), paste("SV", 1:svobj$n.sv, sep=""))
+# modsv <- cbind(mod, svobj$sv)
+# colnames(modsv) <- c(colnames(mod), paste("SV", 1:svobj$n.sv, sep=""))
 
 #generate contrast names (must be "valid")
-contrasts <- paste(drugs_val, "ctl", sep="-")
+# contrasts <- paste(drugs_val, "ctl", sep="-")
+trt_names  <- unique(trt_names)
+trt_namesv <- unique(trt_namesv)
+ctl_names <- gsub("^.+?_(.+?)_.+?_([0-9]+?h)", "ctl_\\1_0M_\\2", trt_namesv)
+
+is_ctrl    <- trt_namesv == ctl_names
+trt_names  <- trt_names[!is_ctrl]
+trt_namesv <- trt_namesv[!is_ctrl]
+ctl_names  <- ctl_names[!is_ctrl]
+
+contrasts <- paste(trt_namesv, ctl_names, sep="-")
+
 
 #run limma analysis (2+ hours)
-ebayes_sv <- fit_ebayes(eset, contrasts, modsv)
+# ebayes_sv <- crossmeta:::fit_ebayes(eset, contrasts, modsv)
+ebayes_sv <- crossmeta:::fit_ebayes(eset, contrasts, mod)
 
 
 #save results
-rma_processed <- list(eset=eset, svobj=svobj, ebayes_sv=ebayes_sv)
-saveRDS(rma_processed, "cmap_es/rma_processed.rds")
+# rma_processed <- list(eset=eset, svobj=svobj, ebayes_sv=ebayes_sv)
+# saveRDS(rma_processed, "cmap_es/rma_processed.rds")
+rma_processed <- list(eset=eset, ebayes_sv=ebayes_sv)
+saveRDS(rma_processed, "cmap_es/rma_processed_ind.rds")
 
 
 
@@ -150,22 +178,46 @@ saveRDS(rma_processed, "cmap_es/rma_processed.rds")
 
 
 #values to calc dprime
+# df <- ebayes_sv$df.residual + ebayes_sv$df.prior
+# ni <- sum(mod[, "ctl"])
+
+# cmap_tables <- list()
+# for (i in seq_along(drugs)) {
+
+#   #get top table
+#   top_table <- topTable(ebayes_sv, coef=i, n=Inf)
+
+#   #add dprime and vardprime
+#   nj <- sum(mod[, i])
+#   top_table[,c("dprime", "vardprime")] <- effectsize(top_table$t, ((ni * nj)/(ni + nj)), df)[, c("dprime", "vardprime")]
+
+#   #store (use eset probe order)
+#   cmap_tables[[drugs[i]]] <- top_table[featureNames(eset), ]
+# }
+
+
 df <- ebayes_sv$df.residual + ebayes_sv$df.prior
-ni <- sum(mod[, "ctl"])
-
 cmap_tables <- list()
-for (i in seq_along(drugs)) {
 
-  #get top table
-  top_table <- topTable(ebayes_sv, coef=i, n=Inf)
+for (i in seq_along(contrasts)) {
+	drug <- gsub('-.+$', "", contrasts[i])
+	ctrl <- gsub('^.+-', "", contrasts[i])
 
-  #add dprime and vardprime
-  nj <- sum(mod[, i])
-  top_table[,c("dprime", "vardprime")] <- effectsize(top_table$t, ((ni * nj)/(ni + nj)), df)[, c("dprime", "vardprime")]
+	drugv <- trt_names[i]
 
-  #store (use eset probe order)
-  cmap_tables[[drugs[i]]] <- top_table[featureNames(eset), ]
+
+    #get top table
+	top_table <- topTable(ebayes_sv, coef=contrasts[i], n=Inf)
+
+	#add dprime and vardprime
+	ni <- sum(mod[, ctrl])
+  	nj <- sum(mod[, drug])
+  	top_table[,c("dprime", "vardprime")] <- effectsize(top_table$t, ((ni * nj)/(ni + nj)), df)[, c("dprime", "vardprime")]
+
+  	#store (use eset probe order)
+  	cmap_tables[[drug]] <- top_table[featureNames(eset), ]
 }
+
 
 
 
@@ -202,11 +254,13 @@ row.names(cmap_es) <- cmap_es$SYMBOL
 
 #remove dprime from column names
 colnames(cmap_es) <- gsub(".dprime", "", colnames(cmap_es))
-cmap_es <- as.matrix(cmap_es[, drugs])
+#cmap_es <- as.matrix(cmap_es[, drugs])
+cmap_es <- as.matrix(cmap_es[, trt_names])
 
 #save results
 cmap_es <- signif(cmap_es, 5)
-devtools::use_data(cmap_es)
+saveRDS(cmap_es, 'cmap_es/cmap_es_ind.rds')
+#devtools::use_data(cmap_es)
 
 
 
@@ -240,8 +294,10 @@ row.names(cmap_var) <- cmap_var$SYMBOL
 
 #remove dprime from column names
 colnames(cmap_var) <- gsub(".vardprime", "", colnames(cmap_var))
-cmap_var <- as.matrix(cmap_var[, drugs])
+# cmap_var <- as.matrix(cmap_var[, drugs])
+cmap_var <- as.matrix(cmap_var[, trt_names])
 
 #save results
 cmap_var <- signif(cmap_var, 5)
-devtools::use_data(cmap_var)
+saveRDS(cmap_var, 'cmap_es/cmap_var_ind.rds')
+#devtools::use_data(cmap_var)
