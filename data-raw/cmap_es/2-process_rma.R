@@ -2,7 +2,6 @@ library(sva)
 library(Biobase)
 library(metaMA)
 library(crossmeta)
-library(hgu133a.db)
 library(data.table)
 
 setwd("~/Documents/Batcave/GEO/ccdata/data-raw/")
@@ -69,39 +68,39 @@ pdata <- data.frame(row.names = sampleNames(eset),
 for (i in seq_along(drugs)) {
   drug     <- drugs[i]
   drug_val <- drugs_val[i]
-
+  
   #get cmap info for drug
   drug_instances <- cmap_instances[cmap_instances$cmap_name == drug, ]
-
+  
   #add drug cmap info
   pids <- drug_instances$perturbation_scan_id
-
+  
   pdata[pids, "drug"]  <- drug
   pdata[pids, "drugv"] <- drug_val
   pdata[pids, "molar"] <- drug_instances$concentration..M.
   pdata[pids, "hours"] <- drug_instances$duration..h.
   pdata[pids, "cell"]  <- drug_instances$cell
   pdata[pids, "batch"] <- drug_instances$batch_id
-
+  
   #get aggregated control ids
   cids_ag <- drug_instances$vehicle_scan_id
-
+  
   #de-aggregate control ids
   for (j in seq_along(cids_ag)) {
     cid_ag <- cids_ag[j]
     pid    <- pids[j]
-
+    
     cids <- c()
     #if multiple controls: get prefix/sufixes
     if (length(strsplit(cid_ag, "[.]")[[1]]) > 2) {
-
+      
       pref = strsplit(pid,"[.]")[[1]][1]
       sufs = strsplit(cid_ag,"[.]")
       sufs = sufs[[1]][-which(sufs[[1]] %in% "")]
-
+      
       #paste prefix/suffixes together
       cids <- c(cids, paste(pref, sufs, sep="."))
-
+      
       #if single control: add cid directly
     } else {
       cids <- cid_ag
@@ -152,7 +151,7 @@ trt_names  <- unique(trt_names)
 trt_namesv <- unique(trt_namesv)
 ctl_names <- gsub("^.+?_(.+?)_.+?_([0-9]+?h)", "ctl_\\1_0M_\\2", trt_namesv)
 
-is_ctrl    <- trt_namesv == ctl_names
+is_ctrl    <- trt_namesv %in% ctl_names
 trt_names  <- trt_names[!is_ctrl]
 trt_namesv <- trt_namesv[!is_ctrl]
 ctl_names  <- ctl_names[!is_ctrl]
@@ -200,22 +199,23 @@ df <- ebayes_sv$df.residual + ebayes_sv$df.prior
 cmap_tables <- list()
 
 for (i in seq_along(contrasts)) {
-	drug <- gsub('-.+$', "", contrasts[i])
-	ctrl <- gsub('^.+-', "", contrasts[i])
-
-	drugv <- trt_names[i]
-
-
-    #get top table
-	top_table <- topTable(ebayes_sv, coef=contrasts[i], n=Inf)
-
-	#add dprime and vardprime
-	ni <- sum(mod[, ctrl])
-  	nj <- sum(mod[, drug])
-  	top_table[,c("dprime", "vardprime")] <- effectsize(top_table$t, ((ni * nj)/(ni + nj)), df)[, c("dprime", "vardprime")]
-
-  	#store (use eset probe order)
-  	cmap_tables[[drug]] <- top_table[featureNames(eset), ]
+  cat('Working on', i, 'of', length(contrasts), '\n')
+  drug <- gsub('-.+$', "", contrasts[i])
+  ctrl <- gsub('^.+-', "", contrasts[i])
+  
+  drugv <- trt_names[i]
+  
+  
+  #get top table
+  top_table <- topTable(ebayes_sv, coef=i, n=Inf)
+  
+  #add dprime and vardprime
+  ni <- sum(mod[, ctrl])
+  nj <- sum(mod[, drug])
+  top_table[,c("dprime", "vardprime")] <- effectsize(top_table$t, ((ni * nj)/(ni + nj)), df)[, c("dprime", "vardprime")]
+  
+  #store (use eset probe order)
+  cmap_tables[[drug]] <- top_table[featureNames(eset), ]
 }
 
 
@@ -224,7 +224,15 @@ for (i in seq_along(contrasts)) {
 
 # cmap_es --------------------------------------
 
+# get map
+ensql <- '/home/alex/Documents/Batcave/GEO/crossmeta/inst/extdata/ensql.sqlite'
+annotation(eset) <- 'GPL96'
+fData(eset)$PROBE <- featureNames(eset)
+sampleNames(eset) <- paste0('s', 1:ncol(eset))
 
+map <- fData(symbol_annot(eset, ensql = ensql))
+map <- map[, c('PROBE', 'SYMBOL')]
+map <- map[!is.na(map$SYMBOL), ]
 
 #get dprimes and adjusted p-values
 es_probes <- lapply(cmap_tables, function(x) x[, c("adj.P.Val", "dprime")])
@@ -232,10 +240,8 @@ es_probes <- do.call(cbind, es_probes)
 
 
 #add symbol
-map <- AnnotationDbi::select(hgu133a.db, row.names(es_probes), "SYMBOL")
-map <- map[!is.na(map$SYMBOL), ]
-es_probes <- es_probes[map$PROBEID, ] #expands 1:many
-es_probes[,"SYMBOL"] <- toupper(map$SYMBOL)
+es_probes <- es_probes[map$PROBE, ] #expands 1:many
+es_probes[,"SYMBOL"] <- map$SYMBOL
 
 # where symbol duplicated, keep smallest p-value
 es_probes <- as.data.table(es_probes)
@@ -243,21 +249,21 @@ dp   <- grep("dprime$", names(es_probes), value = TRUE)
 pval <- grep("adj.P.Val$", names(es_probes), value = TRUE)
 
 cmap_es <- es_probes[, Map(`[`, 
-                            mget(dp), 
-                            lapply(mget(pval), which.min)),
-                      by = SYMBOL]
+                           mget(dp), 
+                           lapply(mget(pval), which.min)),
+                     by = SYMBOL]
 
 
-#use symbol for row names
+# use symbol for row names
 class(cmap_es) <- "data.frame"
 row.names(cmap_es) <- cmap_es$SYMBOL
 
-#remove dprime from column names
+# remove dprime from column names
 colnames(cmap_es) <- gsub(".dprime", "", colnames(cmap_es))
-#cmap_es <- as.matrix(cmap_es[, drugs])
-cmap_es <- as.matrix(cmap_es[, trt_names])
+cmap_es <- as.matrix(cmap_es[, -1])
+colnames(cmap_es) <- trt_names
 
-#save results
+# save results
 cmap_es <- signif(cmap_es, 5)
 saveRDS(cmap_es, 'cmap_es/cmap_es_ind.rds')
 #devtools::use_data(cmap_es)
@@ -283,9 +289,9 @@ dp   <- grep("vardprime$", names(var_probes), value = TRUE)
 pval <- grep("adj.P.Val$", names(var_probes), value = TRUE)
 
 cmap_var <- var_probes[, Map(`[`, 
-                            mget(dp), 
-                            lapply(mget(pval), which.min)),
-                      by = SYMBOL]
+                             mget(dp), 
+                             lapply(mget(pval), which.min)),
+                       by = SYMBOL]
 
 
 #use symbol for row names

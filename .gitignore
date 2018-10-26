@@ -1,12 +1,19 @@
 
 #directories
-data-raw/
 data/
 .Rproj.user/
 
+data-raw/coxpresdb/Hsa/
+data-raw/coxpresdb/Mmu/
 
+*.model
+*.pickle
+*.svg
+*.npy
 *.Rhistory
 *.RData
+*.gz
+*.bz2
 *.ro
 *.rds
 *.sqlite
