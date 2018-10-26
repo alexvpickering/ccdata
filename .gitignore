@@ -5,6 +5,7 @@ data/
 
 data-raw/coxpresdb/Hsa/
 data-raw/coxpresdb/Mmu/
+*.ipynb_checkpoints/
 
 *.model
 *.pickle
@@ -21,6 +22,7 @@ data-raw/coxpresdb/Mmu/
 *.CEL
 *.xls
 *.csv
+*.csv#
 *.txt
 *.root
 *.ods
