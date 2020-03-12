@@ -33,6 +33,10 @@ all_exprs <- merge(all_exprs, exprs(ht_hga_ea), by="row.names")
 row.names(all_exprs) <- all_exprs$Row.names
 all_exprs <- all_exprs[,-(1:2)]
 
+platform <- c(rep('HG-U133A', ncol(hga)),
+              rep('HT_HG-U133A', ncol(ht_hga)),
+              rep('HT_HG-U133A_EA', ncol(ht_hga_ea)))
+
 #generate eset from all_exprs
 all_exprs <- as.matrix(all_exprs)
 eset <- new("ExpressionSet", exprs = all_exprs)
@@ -55,7 +59,7 @@ cmap_instances$batch_id <- gsub("a|b", '', cmap_instances$batch_id)
 drugs     <- unique(cmap_instances$cmap_name)
 drugs_val <- make.names(drugs, unique = TRUE)
 
-pdata <- data.frame(row.names = sampleNames(eset), 
+pdata <- data.frame(row.names = sampleNames(eset),
                     drug = character(7056),
                     drugv = character(7056),
                     molar = numeric(7056),
@@ -68,39 +72,39 @@ pdata <- data.frame(row.names = sampleNames(eset),
 for (i in seq_along(drugs)) {
   drug     <- drugs[i]
   drug_val <- drugs_val[i]
-  
+
   #get cmap info for drug
   drug_instances <- cmap_instances[cmap_instances$cmap_name == drug, ]
-  
+
   #add drug cmap info
   pids <- drug_instances$perturbation_scan_id
-  
+
   pdata[pids, "drug"]  <- drug
   pdata[pids, "drugv"] <- drug_val
   pdata[pids, "molar"] <- drug_instances$concentration..M.
   pdata[pids, "hours"] <- drug_instances$duration..h.
   pdata[pids, "cell"]  <- drug_instances$cell
   pdata[pids, "batch"] <- drug_instances$batch_id
-  
+
   #get aggregated control ids
   cids_ag <- drug_instances$vehicle_scan_id
-  
+
   #de-aggregate control ids
   for (j in seq_along(cids_ag)) {
     cid_ag <- cids_ag[j]
     pid    <- pids[j]
-    
+
     cids <- c()
     #if multiple controls: get prefix/sufixes
     if (length(strsplit(cid_ag, "[.]")[[1]]) > 2) {
-      
+
       pref = strsplit(pid,"[.]")[[1]][1]
       sufs = strsplit(cid_ag,"[.]")
       sufs = sufs[[1]][-which(sufs[[1]] %in% "")]
-      
+
       #paste prefix/suffixes together
       cids <- c(cids, paste(pref, sufs, sep="."))
-      
+
       #if single control: add cid directly
     } else {
       cids <- cid_ag
@@ -115,7 +119,141 @@ for (i in seq_along(drugs)) {
   }
 }
 
-#generate model matrix
+# mixed effect model ---
+library(variancePartition)
+library(BiocParallel)
+
+pdata$platform <- factor(platform)
+pdata$cell <- factor(pdata$cell)
+pdata$batch <- factor(pdata$batch)
+pdata$treatment <- paste(pdata$drug, paste0(pdata$molar, 'M'), paste0(pdata$hours, 'h'), sep='_')
+
+# variance partition (treat all as random effects) ---
+form <- ~(1|treatment) + (1|cell) + (1|batch) + (1|platform)
+param <- SerialParam()
+varPart <- fitExtractVarPartModel(all_exprs, form, pdata, BPPARAM = param)
+saveRDS(varPart, 'cmap_es/varPart.rds')
+plotVarPart(sortCols(varPart))
+
+# remove effect of batch and platform then redo
+varPart <- readRDS('cmap_es/varPart.rds')
+param <- SerialParam()
+residList <- fitVarPartModel(all_exprs, ~ (1|batch) + (1|platform), pdata, BPPARAM = param, fxn=residuals)
+residMatrix <- do.call(rbind, residList)
+
+# fit model on residuals
+form <- ~ (1|treatment) + (1|cell)
+varPartResid <- fitExtractVarPartModel(residMatrix, form, pdata, BPPARAM = param)
+saveRDS(varPartResid, 'cmap_es/varPartResid.rds')
+plotVarPart(sortCols(varPartResid))
+
+# differential expression analysis (treatment has to be fixed effect) ----
+param <- SerialParam()
+form <- ~ 0 + treatment + (1|cell) + (1|batch) + (1|platform)
+
+# exclude treatments with colinearity issues (see below)
+keep <- row.names(pdata)[!pdata$treatment %in% maxs]
+pdata <- pdata[keep, ]
+all_exprs <- all_exprs[, keep]
+
+# univariate contrasts (faster to supply)
+Linit <- variancePartition:::.getAllUniContrasts(all_exprs, form, pdata, return.Linit = TRUE)
+
+# interested contrasts
+levels <- unique(pdata$treatment)
+cons <- paste0('treatment', levels[!grepl('^ctl_', levels)])
+L <- lapply(cons, function(con) {
+  ctrl <- ifelse(grepl('_6h$', con), 'treatmentctl_0M_6h', 'treatmentctl_0M_12h')
+  getContrast(all_exprs, form, pdata, c(con, ctrl), L = Linit)
+})
+L <- do.call(cbind, L)
+
+# initial fit used to speed up subsequent
+system.time(fitInit <- dream(all_exprs, form, pdata, L = L, Linit = Linit, return.fitInit = TRUE, BPPARAM=param))
+variancePartition:::checkModelStatus(fitInit, showWarnings=TRUE, dream=TRUE, colinearityCutoff=0.999)
+#    user  system elapsed
+# 252.463   0.390 230
+
+# levels of treatment with very high correlation to ctrl/each other cause colinearity issues
+# re-run above excluding maxs
+vcor <- colinearityScore(fitInit)
+vcor <- attributes(vcor)[[1]]
+diag(vcor) <- 0
+maxs <- apply(vcor, 2, max)
+maxs <- names(maxs)[maxs > 0.999]
+maxs <- setdiff(maxs, 'treatmentctl_0M_6h')
+maxs <- gsub('^treatment', '', maxs)
+
+
+# save arguments to run as parts
+dream_args <- list(form = form, pdata = pdata, L = L, Linit = Linit, fitInit = fitInit)
+dir.create('cmap_es/dream')
+dir.create('cmap_es/dream/resLists')
+saveRDS(dream_args, 'cmap_es/dream/dream_args.rds')
+saveRDS(all_exprs, 'cmap_es/dream/all_exprs.rds')
+
+# run as parts ---
+setwd('/home/alex/Documents/Batcave/GEO/ccdata/data-raw')
+library(variancePartition)
+library(BiocParallel)
+param <- SerialParam()
+
+# destructure
+a <- readRDS('cmap_es/dream/dream_args.rds')
+form <- a$form
+pdata <- a$pdata
+L <- a$L
+Linit <- a$Linit
+thetaInit <- a$fitInit@theta
+fixefInit <- lme4::fixef(a$fitInit)
+rm(a); gc()
+
+# break into parts
+all_exprs <- readRDS('cmap_es/dream/all_exprs.rds')
+it <- seq(1, 22268)
+for (i in seq_along(it)) {
+    cat('Working on', i, 'of', length(it), '...\n')
+
+    fname <- paste(i, 'exprs.rds', sep = '_')
+
+    exprs_path <- file.path('cmap_es/dream/resLists', fname)
+    exprs <- all_exprs[i,, drop = FALSE]
+    saveRDS(exprs, exprs_path)
+}
+
+# run as parts
+part <- 1
+it <- seq(1, 22268)
+init <- (part-1) * 2500
+iend <- init + 2499
+it <- it[init:iend]
+
+for (i in seq_along(it)) {
+  cat('Working on', i, 'of', length(it), '...\n')
+
+  fpath <- file.path('cmap_es/dream/resLists', paste0(i, '.rds'))
+  exprs_fpath <- file.path('cmap_es/dream/resLists', paste(i, 'exprs.rds', sep = '_'))
+  if (file.exists(fpath)) next
+
+  # get next gene
+  exprs <- readRDS(exprs_fpath)
+  resl  <- dream(exprs, form, pdata, L = L,
+                 Linit = Linit,
+                 thetaInit = thetaInit,
+                 fixefInit = fixefInit,
+                 return.resList = TRUE,
+                 BPPARAM = param)
+
+  # save
+  saveRDS(resl, fpath)
+  unlink(exprs_fpath)
+}
+
+# load parts
+sigGStruct <- pbkrtest::get_SigmaG(a$fitInit)$G
+
+
+#generate model matrix ---
 # treatment <- factor(pdata$drugv, levels = c(drugs_val, 'ctl'))
 
 trt_names   <- paste(pdata$drug, pdata$cell, paste0(pdata$molar, 'M'), paste0(pdata$hours, 'h'), sep='_')
@@ -193,8 +331,6 @@ saveRDS(rma_processed, "cmap_es/rma_processed_ind.rds")
 #   #store (use eset probe order)
 #   cmap_tables[[drugs[i]]] <- top_table[featureNames(eset), ]
 # }
-
-
 df <- ebayes_sv$df.residual + ebayes_sv$df.prior
 cmap_tables <- list()
 
@@ -202,21 +338,23 @@ for (i in seq_along(contrasts)) {
   cat('Working on', i, 'of', length(contrasts), '\n')
   drug <- gsub('-.+$', "", contrasts[i])
   ctrl <- gsub('^.+-', "", contrasts[i])
-  
+
   drugv <- trt_names[i]
-  
-  
+
+
   #get top table
   top_table <- topTable(ebayes_sv, coef=i, n=Inf)
-  
+
   #add dprime and vardprime
   ni <- sum(mod[, ctrl])
   nj <- sum(mod[, drug])
   top_table[,c("dprime", "vardprime")] <- effectsize(top_table$t, ((ni * nj)/(ni + nj)), df)[, c("dprime", "vardprime")]
-  
+
   #store (use eset probe order)
   cmap_tables[[drug]] <- top_table[featureNames(eset), ]
 }
+
+saveRDS(cmap_tables, 'cmap_es/cmap_tables_ind.rds')
 
 
 
@@ -225,7 +363,7 @@ for (i in seq_along(contrasts)) {
 # cmap_es --------------------------------------
 
 # get map
-ensql <- '/home/alex/Documents/Batcave/GEO/crossmeta/inst/extdata/ensql.sqlite'
+ensql <- '/home/alex/Documents/Batcave/GEO/crossmeta/data-raw/entrezdt/ensql.sqlite'
 annotation(eset) <- 'GPL96'
 fData(eset)$PROBE <- featureNames(eset)
 sampleNames(eset) <- paste0('s', 1:ncol(eset))
@@ -248,8 +386,8 @@ es_probes <- as.data.table(es_probes)
 dp   <- grep("dprime$", names(es_probes), value = TRUE)
 pval <- grep("adj.P.Val$", names(es_probes), value = TRUE)
 
-cmap_es <- es_probes[, Map(`[`, 
-                           mget(dp), 
+cmap_es <- es_probes[, Map(`[`,
+                           mget(dp),
                            lapply(mget(pval), which.min)),
                      by = SYMBOL]
 
@@ -288,8 +426,8 @@ var_probes <- as.data.table(var_probes)
 dp   <- grep("vardprime$", names(var_probes), value = TRUE)
 pval <- grep("adj.P.Val$", names(var_probes), value = TRUE)
 
-cmap_var <- var_probes[, Map(`[`, 
-                             mget(dp), 
+cmap_var <- var_probes[, Map(`[`,
+                             mget(dp),
                              lapply(mget(pval), which.min)),
                        by = SYMBOL]
 
