@@ -222,17 +222,17 @@ for (i in seq_along(it)) {
 }
 
 # run as parts of size 2500 (~9 total)
-part <- 1
+part <- 8
 it <- seq(1, 22268)
 init <- (part-1) * 2500
 iend <- min(22268, init + 2499)
 it <- it[init:iend]
 
 for (i in seq_along(it)) {
-  cat('Working on', i, 'of', length(it), '...\n')
+  cat('Working on', it[i], 'of', tail(it, 1), '...\n')
 
-  fpath <- file.path('cmap_es/dream/resLists', paste0(i, '.rds'))
-  exprs_fpath <- file.path('cmap_es/dream/resLists', paste(i, 'exprs.rds', sep = '_'))
+  fpath <- file.path('cmap_es/dream/resLists', paste0(it[i], '.rds'))
+  exprs_fpath <- file.path('cmap_es/dream/resLists', paste(it[i], 'exprs.rds', sep = '_'))
   if (file.exists(fpath)) next
 
   # get next gene
