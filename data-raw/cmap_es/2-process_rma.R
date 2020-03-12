@@ -221,11 +221,11 @@ for (i in seq_along(it)) {
     saveRDS(exprs, exprs_path)
 }
 
-# run as parts
+# run as parts of size 2500 (~9 total)
 part <- 1
 it <- seq(1, 22268)
 init <- (part-1) * 2500
-iend <- init + 2499
+iend <- min(22268, init + 2499)
 it <- it[init:iend]
 
 for (i in seq_along(it)) {
@@ -247,6 +247,7 @@ for (i in seq_along(it)) {
   # save
   saveRDS(resl, fpath)
   unlink(exprs_fpath)
+  rm(resl, exprs); gc()
 }
 
 # load parts
