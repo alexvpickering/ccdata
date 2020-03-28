@@ -26,4 +26,7 @@ data-raw/coxpresdb/Mmu/
 *.txt
 *.root
 *.ods
+*.soft
+*.tar
 .Rproj.user
+
