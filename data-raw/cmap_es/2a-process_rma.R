@@ -4,7 +4,7 @@ library(metaMA)
 library(crossmeta)
 library(data.table)
 
-setwd("~/Documents/Batcave/GEO/ccdata/data-raw/")
+setwd("data-raw")
 
 # Load Data -------------------------
 
@@ -229,7 +229,7 @@ saveRDS(cmap_tables, 'cmap_es/cmap_tables_ind.rds')
 
 
 
-# cmap_es --------------------------------------
+# cmap_es and cmap_adj.pvals --------------------------------------
 
 # get map
 ensql <- '/home/alex/Documents/Batcave/GEO/crossmeta/data-raw/entrezdt/ensql.sqlite'
@@ -260,19 +260,31 @@ cmap_es <- es_probes[, Map(`[`,
                            lapply(mget(pval), which.min)),
                      by = SYMBOL]
 
+cmap_pval <- es_probes[, Map(`[`,
+                           mget(pval),
+                           lapply(mget(pval), which.min)),
+                     by = SYMBOL]
 
 # use symbol for row names
 class(cmap_es) <- "data.frame"
 row.names(cmap_es) <- cmap_es$SYMBOL
+
+class(cmap_pval) <- "data.frame"
+row.names(cmap_pval) <- cmap_pval$SYMBOL
 
 # remove dprime from column names
 colnames(cmap_es) <- gsub(".dprime", "", colnames(cmap_es))
 cmap_es <- as.matrix(cmap_es[, -1])
 colnames(cmap_es) <- trt_names
 
+colnames(cmap_pval) <- gsub(".adj.P.Val", "", colnames(cmap_pval))
+cmap_pval <- as.matrix(cmap_pval[, -1])
+colnames(cmap_pval) <- trt_names
+
 # save results
 cmap_es <- signif(cmap_es, 5)
 saveRDS(cmap_es, 'cmap_es/cmap_es_ind.rds')
+saveRDS(cmap_pval, 'cmap_es/cmap_pval.adj_ind.rds')
 #devtools::use_data(cmap_es)
 
 
