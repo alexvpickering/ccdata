@@ -125,6 +125,8 @@ saveRDS(all_exprs, 'cmap_es/all_exprs.rds')
 #generate model matrix ---
 # treatment <- factor(pdata$drugv, levels = c(drugs_val, 'ctl'))
 
+pdata <- readRDS('cmap_es/pdata.rds')
+
 trt_names   <- paste(pdata$drug, pdata$cell, paste0(pdata$molar, 'M'), paste0(pdata$hours, 'h'), sep='_')
 trt_namesv  <- make.names(trt_names)
 
@@ -229,7 +231,10 @@ saveRDS(cmap_tables, 'cmap_es/cmap_tables_ind.rds')
 
 
 
-# cmap_es and cmap_adj.pvals --------------------------------------
+# cmap_es --------------------------------------
+rma_processed <- readRDS("cmap_es/rma_processed_ind.rds")
+eset <- rma_processed$eset
+rm(rma_processed); gc()
 
 # get map
 ensql <- '/home/alex/Documents/Batcave/GEO/crossmeta/data-raw/entrezdt/ensql.sqlite'
@@ -242,6 +247,7 @@ map <- map[, c('PROBE', 'SYMBOL')]
 map <- map[!is.na(map$SYMBOL), ]
 
 #get dprimes and adjusted p-values
+cmap_tables <- readRDS('cmap_es/cmap_tables_ind.rds')
 es_probes <- lapply(cmap_tables, function(x) x[, c("adj.P.Val", "dprime")])
 es_probes <- do.call(cbind, es_probes)
 
@@ -260,32 +266,19 @@ cmap_es <- es_probes[, Map(`[`,
                            lapply(mget(pval), which.min)),
                      by = SYMBOL]
 
-cmap_pval <- es_probes[, Map(`[`,
-                           mget(pval),
-                           lapply(mget(pval), which.min)),
-                     by = SYMBOL]
-
 # use symbol for row names
 class(cmap_es) <- "data.frame"
 row.names(cmap_es) <- cmap_es$SYMBOL
-
-class(cmap_pval) <- "data.frame"
-row.names(cmap_pval) <- cmap_pval$SYMBOL
 
 # remove dprime from column names
 colnames(cmap_es) <- gsub(".dprime", "", colnames(cmap_es))
 cmap_es <- as.matrix(cmap_es[, -1])
 colnames(cmap_es) <- trt_names
 
-colnames(cmap_pval) <- gsub(".adj.P.Val", "", colnames(cmap_pval))
-cmap_pval <- as.matrix(cmap_pval[, -1])
-colnames(cmap_pval) <- trt_names
-
 # save results
 cmap_es <- signif(cmap_es, 5)
 saveRDS(cmap_es, 'cmap_es/cmap_es_ind.rds')
-saveRDS(cmap_pval, 'cmap_es/cmap_pval.adj_ind.rds')
-#devtools::use_data(cmap_es)
+usethis::use_data(cmap_es, overwrite = TRUE)
 
 
 
@@ -296,11 +289,13 @@ var_probes <- lapply(cmap_tables, function(x) x[, c("adj.P.Val", "vardprime")])
 var_probes <- do.call(cbind, var_probes)
 
 
-#add symbol
-map <- AnnotationDbi::select(hgu133a.db, row.names(var_probes), "SYMBOL")
+map <- fData(symbol_annot(eset, ensql = ensql))
+map <- map[, c('PROBE', 'SYMBOL')]
 map <- map[!is.na(map$SYMBOL), ]
-var_probes <- var_probes[map$PROBEID, ] #expands 1:many
-var_probes[,"SYMBOL"] <- toupper(map$SYMBOL)
+
+#add symbol
+var_probes <- var_probes[map$PROBE, ] #expands 1:many
+var_probes[,"SYMBOL"] <- map$SYMBOL
 
 # where symbol duplicated, keep smallest p-value
 var_probes <- as.data.table(var_probes)
@@ -319,10 +314,60 @@ row.names(cmap_var) <- cmap_var$SYMBOL
 
 #remove dprime from column names
 colnames(cmap_var) <- gsub(".vardprime", "", colnames(cmap_var))
-# cmap_var <- as.matrix(cmap_var[, drugs])
-cmap_var <- as.matrix(cmap_var[, trt_names])
+cmap_var <- as.matrix(cmap_var[, -1])
+colnames(cmap_var) <- trt_names
 
 #save results
 cmap_var <- signif(cmap_var, 5)
 saveRDS(cmap_var, 'cmap_es/cmap_var_ind.rds')
-#devtools::use_data(cmap_var)
+usethis::use_data(cmap_var, overwrite = TRUE)
+
+
+# cmap_pval.adj -------------------------
+# NOTE: row names aren't exact match with cmap_es (updated org.Hs.eg.db?)
+
+rma_processed <- readRDS("cmap_es/rma_processed_ind.rds")
+eset <- rma_processed$eset
+rm(rma_processed); gc()
+
+# get map
+ensql <- '/home/alex/Documents/Batcave/GEO/crossmeta/data-raw/entrezdt/ensql.sqlite'
+annotation(eset) <- 'GPL96'
+fData(eset)$PROBE <- featureNames(eset)
+sampleNames(eset) <- paste0('s', 1:ncol(eset))
+
+map <- fData(symbol_annot(eset, ensql = ensql))
+map <- map[, c('PROBE', 'SYMBOL')]
+map <- map[!is.na(map$SYMBOL), ]
+
+#get dprimes and adjusted p-values
+cmap_tables <- readRDS('cmap_es/cmap_tables_ind.rds')
+es_probes <- lapply(cmap_tables, function(x) x[, c("adj.P.Val", "dprime")])
+es_probes <- do.call(cbind, es_probes)
+
+
+#add symbol
+es_probes <- es_probes[map$PROBE, ] #expands 1:many
+es_probes[,"SYMBOL"] <- map$SYMBOL
+
+# where symbol duplicated, keep smallest p-value
+es_probes <- as.data.table(es_probes)
+dp   <- grep("dprime$", names(es_probes), value = TRUE)
+pval <- grep("adj.P.Val$", names(es_probes), value = TRUE)
+
+cmap_pval <- es_probes[, Map(`[`,
+                             mget(pval),
+                             lapply(mget(pval), which.min)),
+                       by = SYMBOL]
+
+# use symbol for row names
+class(cmap_pval) <- "data.frame"
+row.names(cmap_pval) <- cmap_pval$SYMBOL
+
+# remove dprime from column names
+colnames(cmap_pval) <- gsub(".adj.P.Val", "", colnames(cmap_pval))
+cmap_pval <- as.matrix(cmap_pval[, -1])
+colnames(cmap_pval) <- trt_names
+
+# save results
+saveRDS(cmap_pval, 'cmap_es/cmap_pval.adj_ind.rds')
