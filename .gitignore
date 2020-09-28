@@ -6,6 +6,7 @@ data/
 data-raw/coxpresdb/Hsa/
 data-raw/coxpresdb/Mmu/
 *.ipynb_checkpoints/
+data-raw/zak_obesity/
 
 *.model
 *.pickle

@@ -371,3 +371,52 @@ colnames(cmap_pval) <- trt_names
 
 # save results
 saveRDS(cmap_pval, 'cmap_es/cmap_pval.adj_ind.rds')
+
+# cmap_logfc -------------------------
+# NOTE: row names aren't exact match with cmap_es (updated org.Hs.eg.db?)
+
+rma_processed <- readRDS("cmap_es/rma_processed_ind.rds")
+eset <- rma_processed$eset
+rm(rma_processed); gc()
+
+# get map
+ensql <- '/home/alex/Documents/Batcave/GEO/crossmeta/data-raw/entrezdt/ensql.sqlite'
+annotation(eset) <- 'GPL96'
+fData(eset)$PROBE <- featureNames(eset)
+sampleNames(eset) <- paste0('s', 1:ncol(eset))
+
+map <- fData(symbol_annot(eset, ensql = ensql))
+map <- map[, c('PROBE', 'SYMBOL')]
+map <- map[!is.na(map$SYMBOL), ]
+
+#get dprimes and adjusted p-values
+cmap_tables <- readRDS('cmap_es/cmap_tables_ind.rds')
+es_probes <- lapply(cmap_tables, function(x) x[, c("adj.P.Val", "logFC")])
+es_probes <- do.call(cbind, es_probes)
+
+
+#add symbol
+es_probes <- es_probes[map$PROBE, ] #expands 1:many
+es_probes[,"SYMBOL"] <- map$SYMBOL
+
+# where symbol duplicated, keep smallest p-value
+es_probes <- as.data.table(es_probes)
+logfc <- grep("logFC$", names(es_probes), value = TRUE)
+pval <- grep("adj.P.Val$", names(es_probes), value = TRUE)
+
+cmap_logfc <- es_probes[, Map(`[`,
+                             mget(logfc),
+                             lapply(mget(pval), which.min)),
+                       by = SYMBOL]
+
+# use symbol for row names
+class(cmap_logfc) <- "data.frame"
+row.names(cmap_logfc) <- cmap_logfc$SYMBOL
+
+# remove dprime from column names
+colnames(cmap_logfc) <- gsub(".logFC", "", colnames(cmap_logfc))
+cmap_logfc <- as.matrix(cmap_logfc[, -1])
+colnames(cmap_logfc) <- trt_names
+
+# save results
+saveRDS(cmap_logfc, 'cmap_es/cmap_logfc_ind.rds')
